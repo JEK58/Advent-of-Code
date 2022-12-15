@@ -67,16 +67,15 @@ for (const devices of sensors) {
 }
 
 function getUncoveredPosition(limit: number) {
-  let found = false;
-  outerLoop: for (const sensor of sensorsWithDist) {
+  for (const sensor of sensorsWithDist) {
     const [x, y] = sensor.center;
     const d = sensor.distance + 1;
 
     for (let i = 0; i < d; i++) {
-      if ((found ||= posIsCovered([x + i, y - d + i], limit))) break outerLoop;
-      if ((found ||= posIsCovered([x + d - i, y + 1], limit))) break outerLoop;
-      if ((found ||= posIsCovered([x - i, y - d - i], limit))) break outerLoop;
-      if ((found ||= posIsCovered([x - i, y - d - i], limit))) break outerLoop;
+      if (posIsCovered([x + i, y - d + i], limit)) return;
+      if (posIsCovered([x + d - i, y + 1], limit)) return;
+      if (posIsCovered([x - i, y - d - i], limit)) return;
+      if (posIsCovered([x - i, y - d - i], limit)) return;
     }
   }
 }
@@ -94,10 +93,10 @@ function posIsCovered(pos: Position, limit: number) {
     if (d <= sensor.distance || distPosToBeacon == 0) return false;
   }
   console.log(pos[0] * 4000000 + pos[1]);
-
   return true;
 }
 
 // 5040643 at row 2000000
 console.log(getPositionsWithoutBeacon(2000000));
+// 11016575214126
 getUncoveredPosition(4000000);
