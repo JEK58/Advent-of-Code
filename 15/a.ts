@@ -1,5 +1,3 @@
-// 961
-
 const input = await Deno.readTextFile("input.txt");
 const sensors = input
   .replaceAll("Sensor at x=", "")
