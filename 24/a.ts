@@ -73,7 +73,8 @@ function nextBlizzardPositions(list: Blizzard[], map: Map) {
   return newPositions;
 }
 
-function updateMap([...map]: Map, blizzards: Blizzard[]) {
+function updateMap(_map: Map, blizzards: Blizzard[]) {
+  const map = cloneMap(_map);
   for (let l = 0; l < map.length; l++) {
     for (let c = 0; c < map[0].length; c++) {
       const el = map[l][c];
@@ -109,37 +110,56 @@ function movePack(_map: Map, pack: Position) {
       if (y >= 0 && x >= 0 && map[y][x] == ".") return n;
     })
     .filter((f) => !!f);
-  if (possibleDirs.length > 1) console.log("Multiple options");
 
   if (possibleDirs.length) return possibleDirs as Position[];
   return [pack];
 }
-type Q = [Position, Map, number];
 
-function bfs(start: Position, end: Position, _map: Map) {
-  const map = JSON.parse(JSON.stringify(_map)) as Map;
+function cloneMap(map: Map) {
+  return JSON.parse(JSON.stringify(map)) as Map;
+}
 
-  const Q: Q[] = [[start, map, 0]];
-  // const visited = new Set(start.name);
+function getStateHash(item: Q) {
+  const hash = item[0].join() + item[1].flat(4).join() + item[2].flat().join();
+  // console.log(hash);
+
+  return hash;
+}
+type Q = [Position, Map, Blizzard[], number];
+
+function bfs(start: Position, end: Position, map: Map) {
+  const blizzards = findBlizzards(map);
+
+  const Q: Q[] = [[start, cloneMap(map), blizzards, 1]];
+  const visited = new Set(getStateHash([start, cloneMap(map), blizzards, 1]));
   let i = 0;
+
   while (Q.length && i < 19) {
     const item = Q.shift();
     if (!item) break;
-    let [packPos, map, time] = item;
-    console.log("New round", time);
-    printMap(map, packPos);
+    let [packPos, map, blizzards, time] = item;
+    // console.log("New round", time);
+    // printMap(map, packPos);
 
-    let blizzards = findBlizzards(map);
+    // console.log("Blizzards:", blizzards.length);
 
-    blizzards = nextBlizzardPositions(blizzards, map);
-    map = updateMap(map, blizzards);
+    const nextBlizzards = nextBlizzardPositions(blizzards, map);
+    // console.log("Blizzards:", blizzards.length);
+
+    map = updateMap(map, nextBlizzards);
     const options = movePack(map, packPos);
 
     for (const option of options) {
-      if (posToString(option) == posToString(end)) return time;
-      Q.push([option, JSON.parse(JSON.stringify(map)), time + 1]);
+      const item: Q = [option, cloneMap(map), nextBlizzards, time + 1];
+      const hash = getStateHash(item);
+
+      if (!visited.has(hash)) {
+        visited.add(hash);
+        if (posToString(option) == posToString(end)) return time;
+        Q.push(item);
+      }
     }
-    i++;
+    // i++;
   }
 }
 
