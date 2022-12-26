@@ -142,12 +142,12 @@ function bfs(start: Position, end: Position, map: Map, startTime: number) {
     const [packPos, time] = item;
     const [w, h] = getConstraints(map);
     const index = time % (w * h);
-    console.log("Index:", index);
+    // console.log("Index:", index);
 
     const options = getPossibleMoves(packPos, freePositions[index], start, end);
     if (!options) continue;
-    console.log(options);
-    console.log(freePositions[index]);
+    // console.log(options);
+    // console.log(freePositions[index]);
 
     for (const option of options) {
       const item: Q = [option, time + 1];
@@ -179,9 +179,13 @@ function solve2(_map: Map) {
 
   const [start, end] = getStartEndPos(map);
 
-  let time = bfs(end, start, map, 19);
+  let time = bfs(start, end, map, 0);
+  time = bfs(end, start, map, time);
+  time = bfs(start, end, map, time);
 
   return time;
 }
-
+// 240
+console.log(solve(map));
+// 717
 console.log(solve2(map));
