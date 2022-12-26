@@ -1,5 +1,10 @@
 const input = await Deno.readTextFile("input.txt");
-const map = input.split(/\r?\n/g).map((l) => l.split("")) as Map;
+const map = input
+  .split(/\r?\n/g)
+  .map((l) => l.split("").filter((f) => f != "#")) as Map;
+
+map.pop();
+map.shift();
 
 type Position = [number, number];
 type Map = Element[][];
@@ -14,12 +19,6 @@ const blizDirections = {
   "^": [-1, 0] as Position,
 };
 
-function printMap(_map: Map, packPos: Position) {
-  const map = JSON.parse(JSON.stringify(_map)) as Map;
-  map[packPos[0]][packPos[1]] = "E";
-  for (const line of map) console.log(line.join(""));
-}
-
 function findBlizzards(map: Map) {
   const blizzards: Blizzard[] = [];
   for (let l = 0; l < map.length; l++) {
@@ -33,8 +32,8 @@ function findBlizzards(map: Map) {
 }
 
 function getConstraints(map: Map) {
-  const hor = map[0].length - 2;
-  const vert = map.length - 2;
+  const hor = map[0].length;
+  const vert = map.length;
   return [hor, vert];
 }
 
@@ -47,12 +46,12 @@ function moveBlizzard(blizzard: Blizzard, map: Map): Blizzard {
 
   if (blizzard[0] == "<" || blizzard[0] == ">") {
     // console.log("move hor");
-    x = mod(x - 1 + dir[1], hor) + 1;
+    x = mod(x + dir[1], hor);
   }
 
   if (blizzard[0] == "v" || blizzard[0] == "^") {
     // console.log("move vert");
-    y = mod(y - 1 + dir[0], vert) + 1;
+    y = mod(y + dir[0], vert);
   }
   return [blizzard[0], [y, x]];
 }
@@ -65,48 +64,50 @@ function combinePositions(pos1: Position, pos2: Position): Position {
   return [pos1[0] + pos2[0], pos1[1] + pos2[1]];
 }
 
-function nextBlizzardPositions(list: Blizzard[], map: Map) {
-  const newPositions: Blizzard[] = [];
-  for (const blizzard of list) {
-    newPositions.push(moveBlizzard(blizzard, map));
-  }
-  return newPositions;
-}
+function getFreePositions(map: Map) {
+  const [w, h] = getConstraints(map);
+  const maxStates = w * h;
 
-function updateMap(_map: Map, blizzards: Blizzard[]) {
-  const map = cloneMap(_map);
-  for (let l = 0; l < map.length; l++) {
-    for (let c = 0; c < map[0].length; c++) {
-      const el = map[l][c];
-      if (el != "#" && el != ".") map[l][c] = ".";
+  const freePositions: Set<string>[] = [];
+
+  let blizzards = findBlizzards(map);
+
+  for (let i = 0; i < maxStates; i++) {
+    const blizPos = new Set(blizzards.map((b) => posToString(b[1])));
+
+    const free: Position[] = [];
+    for (let i = 0; i < h; i++) {
+      for (let j = 0; j < w; j++) {
+        if (!blizPos.has(posToString([i, j]))) free.push([i, j]);
+      }
     }
-  }
-  for (const blizzard of blizzards) {
-    const [y, x] = blizzard[1];
-    map[y][x] = blizzard[0];
-  }
-  return map;
-}
 
-function getWalls(map: Map) {
-  const walls: string[] = [];
-  for (let l = 0; l < map.length; l++) {
-    for (let c = 0; c < map[0].length; c++) {
-      const el = map[l][c];
-      if (el == "#") walls.push(posToString([l, c]));
+    freePositions.push(new Set(free.map((b) => posToString(b))));
+
+    const newPositions: Blizzard[] = [];
+
+    for (const blizzard of blizzards) {
+      newPositions.push(moveBlizzard(blizzard, map));
     }
+
+    blizzards = JSON.parse(JSON.stringify(newPositions)) as Blizzard[];
   }
 
-  return new Set(walls);
+  return freePositions;
 }
 
 function getStartEndPos(map: Map) {
-  const start: Position = [0, 1];
-  const end: Position = [map.length - 1, map[0].length - 2];
+  const start: Position = [-1, 0];
+  const end: Position = [map.length, map[0].length - 1];
   return [start, end];
 }
 
-function movePack(pack: Position, blizzards: Blizzard[], walls: Set<string>) {
+function getPossibleMoves(
+  pack: Position,
+  free: Set<string>,
+  start: Position,
+  end: Position
+) {
   const dirs: Position[] = [
     [0, 0],
     [0, -1],
@@ -114,67 +115,43 @@ function movePack(pack: Position, blizzards: Blizzard[], walls: Set<string>) {
     [1, 0],
     [-1, 0],
   ];
-  const blizPositions = new Set(blizzards.map((b) => posToString(b[1])));
   const possibleDirs = dirs
     .map((d) => combinePositions(pack, d))
     .map((n) => {
       const [y, x] = n;
-      if (y >= 0 && x >= 0 && !blizPositions.has(posToString([y, x]))) return n;
+      if (y >= 0 && x >= 0 && free.has(posToString([y, x]))) return n;
+      if (y == start[0] && x == start[1]) return n;
+      if (y == end[0] && x == end[1]) return n;
     })
-    .filter((f) => !!f)
-    .filter((f) => posToString(f) != posToString([0, 1]))
-    .filter((f) => !walls.has(posToString(f)));
-
-  // console.log(possibleDirs);
+    .filter((f) => !!f);
 
   if (possibleDirs.length) return possibleDirs as Position[];
-  return [pack];
+  return;
 }
 
-function cloneMap(map: Map) {
-  return JSON.parse(JSON.stringify(map)) as Map;
-}
+type Q = [Position, number];
 
-function getStateHash(item: Q) {
-  const hash = item[0].join() + "#" + item[1].flat().join(); //+ "#" + item[2];
-  // console.log(hash);
+function bfs(start: Position, end: Position, map: Map, startTime: number) {
+  const freePositions = getFreePositions(map);
 
-  return hash;
-}
-type Q = [Position, Blizzard[], number];
-
-function bfs(start: Position, end: Position, map: Map) {
-  const blizzards = findBlizzards(map);
-
-  const walls = getWalls(map);
-
-  const Q: Q[] = [[start, blizzards, 1]];
-  const visited = new Set(getStateHash([start, blizzards, 1]));
-  let i = 0;
-
-  while (Q.length && i < 1000) {
-    console.log("Q", Q.length);
-
+  const Q: Q[] = [[start, startTime]];
+  const visited = new Set(posToString(start) + "#" + startTime);
+  while (Q.length) {
     const item = Q.shift();
     if (!item) break;
-    const [packPos, blizzards, time] = item;
-    console.log("New round", time, packPos);
-    // printMap(map, packPos);
+    const [packPos, time] = item;
+    const [w, h] = getConstraints(map);
+    const index = time % (w * h);
+    console.log("Index:", index);
 
-    // console.log("Blizzards:", blizzards.length);
-
-    const nextBlizzards = nextBlizzardPositions(blizzards, map);
-    // console.log("Blizzards:", blizzards.length);
-
-    // map = updateMap(map, nextBlizzards);
-    const options = movePack(packPos, nextBlizzards, walls);
-    // console.log("Pack", packPos, "Time:", time);
-
+    const options = getPossibleMoves(packPos, freePositions[index], start, end);
+    if (!options) continue;
     console.log(options);
+    console.log(freePositions[index]);
 
     for (const option of options) {
-      const item: Q = [option, nextBlizzards, time + 1];
-      const hash = getStateHash(item);
+      const item: Q = [option, time + 1];
+      const hash = posToString(item[0]) + "#" + item[1];
 
       if (!visited.has(hash)) {
         visited.add(hash);
@@ -182,7 +159,6 @@ function bfs(start: Position, end: Position, map: Map) {
         Q.push(item);
       }
     }
-    i++;
   }
 }
 
@@ -195,7 +171,17 @@ function solve(_map: Map) {
 
   const [start, end] = getStartEndPos(map);
 
-  return bfs(start, end, map);
+  return bfs(start, end, map, 0);
 }
 
-console.log(solve(map));
+function solve2(_map: Map) {
+  const map = JSON.parse(JSON.stringify(_map)) as Map;
+
+  const [start, end] = getStartEndPos(map);
+
+  let time = bfs(end, start, map, 19);
+
+  return time;
+}
+
+console.log(solve2(map));
