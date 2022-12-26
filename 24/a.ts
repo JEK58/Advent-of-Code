@@ -88,28 +88,44 @@ function updateMap(_map: Map, blizzards: Blizzard[]) {
   return map;
 }
 
+function getWalls(map: Map) {
+  const walls: string[] = [];
+  for (let l = 0; l < map.length; l++) {
+    for (let c = 0; c < map[0].length; c++) {
+      const el = map[l][c];
+      if (el == "#") walls.push(posToString([l, c]));
+    }
+  }
+
+  return new Set(walls);
+}
+
 function getStartEndPos(map: Map) {
   const start: Position = [0, 1];
   const end: Position = [map.length - 1, map[0].length - 2];
   return [start, end];
 }
 
-function movePack(_map: Map, pack: Position) {
-  const map = JSON.parse(JSON.stringify(_map)) as Map;
-
+function movePack(pack: Position, blizzards: Blizzard[], walls: Set<string>) {
   const dirs: Position[] = [
+    [0, 0],
     [0, -1],
     [0, 1],
     [1, 0],
     [-1, 0],
   ];
+  const blizPositions = new Set(blizzards.map((b) => posToString(b[1])));
   const possibleDirs = dirs
     .map((d) => combinePositions(pack, d))
     .map((n) => {
       const [y, x] = n;
-      if (y >= 0 && x >= 0 && map[y][x] == ".") return n;
+      if (y >= 0 && x >= 0 && !blizPositions.has(posToString([y, x]))) return n;
     })
-    .filter((f) => !!f);
+    .filter((f) => !!f)
+    .filter((f) => posToString(f) != posToString([0, 1]))
+    .filter((f) => !walls.has(posToString(f)));
+
+  // console.log(possibleDirs);
 
   if (possibleDirs.length) return possibleDirs as Position[];
   return [pack];
@@ -120,25 +136,29 @@ function cloneMap(map: Map) {
 }
 
 function getStateHash(item: Q) {
-  const hash = item[0].join() + item[1].flat(4).join() + item[2].flat().join();
+  const hash = item[0].join() + "#" + item[1].flat().join(); //+ "#" + item[2];
   // console.log(hash);
 
   return hash;
 }
-type Q = [Position, Map, Blizzard[], number];
+type Q = [Position, Blizzard[], number];
 
 function bfs(start: Position, end: Position, map: Map) {
   const blizzards = findBlizzards(map);
 
-  const Q: Q[] = [[start, cloneMap(map), blizzards, 1]];
-  const visited = new Set(getStateHash([start, cloneMap(map), blizzards, 1]));
+  const walls = getWalls(map);
+
+  const Q: Q[] = [[start, blizzards, 1]];
+  const visited = new Set(getStateHash([start, blizzards, 1]));
   let i = 0;
 
-  while (Q.length && i < 19) {
+  while (Q.length && i < 1000) {
+    console.log("Q", Q.length);
+
     const item = Q.shift();
     if (!item) break;
-    let [packPos, map, blizzards, time] = item;
-    // console.log("New round", time);
+    const [packPos, blizzards, time] = item;
+    console.log("New round", time, packPos);
     // printMap(map, packPos);
 
     // console.log("Blizzards:", blizzards.length);
@@ -146,11 +166,14 @@ function bfs(start: Position, end: Position, map: Map) {
     const nextBlizzards = nextBlizzardPositions(blizzards, map);
     // console.log("Blizzards:", blizzards.length);
 
-    map = updateMap(map, nextBlizzards);
-    const options = movePack(map, packPos);
+    // map = updateMap(map, nextBlizzards);
+    const options = movePack(packPos, nextBlizzards, walls);
+    // console.log("Pack", packPos, "Time:", time);
+
+    console.log(options);
 
     for (const option of options) {
-      const item: Q = [option, cloneMap(map), nextBlizzards, time + 1];
+      const item: Q = [option, nextBlizzards, time + 1];
       const hash = getStateHash(item);
 
       if (!visited.has(hash)) {
@@ -159,7 +182,7 @@ function bfs(start: Position, end: Position, map: Map) {
         Q.push(item);
       }
     }
-    // i++;
+    i++;
   }
 }
 
