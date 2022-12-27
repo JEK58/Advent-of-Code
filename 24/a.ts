@@ -71,7 +71,9 @@ function getFreePositions(map: Map) {
   const freePositions: Set<string>[] = [];
 
   let blizzards = findBlizzards(map);
+  let cycle = 0;
 
+  const cache: Set<string> = new Set();
   for (let i = 0; i < maxStates; i++) {
     const blizPos = new Set(blizzards.map((b) => posToString(b[1])));
 
@@ -81,6 +83,13 @@ function getFreePositions(map: Map) {
         if (!blizPos.has(posToString([i, j]))) free.push([i, j]);
       }
     }
+    const string = free.flat().join(",");
+    if (cache.has(string)) {
+      cycle = i;
+      break;
+    }
+
+    cache.add(string);
 
     freePositions.push(new Set(free.map((b) => posToString(b))));
 
@@ -93,7 +102,7 @@ function getFreePositions(map: Map) {
     blizzards = JSON.parse(JSON.stringify(newPositions)) as Blizzard[];
   }
 
-  return freePositions;
+  return { positions: freePositions, cycle };
 }
 
 function getStartEndPos(map: Map) {
@@ -108,13 +117,8 @@ function getPossibleMoves(
   start: Position,
   end: Position
 ) {
-  const dirs: Position[] = [
-    [0, 0],
-    [0, -1],
-    [0, 1],
-    [1, 0],
-    [-1, 0],
-  ];
+  // prettier-ignore
+  const dirs: Position[] = [[0, 0], [0, -1], [0, 1], [1, 0], [-1, 0],];
   const possibleDirs = dirs
     .map((d) => combinePositions(pack, d))
     .map((n) => {
@@ -131,23 +135,27 @@ function getPossibleMoves(
 
 type Q = [Position, number];
 
-function bfs(start: Position, end: Position, map: Map, startTime: number) {
-  const freePositions = getFreePositions(map);
-
+function bfs(
+  start: Position,
+  end: Position,
+  freePositions: { positions: Set<string>[]; cycle: number },
+  startTime: number
+) {
   const Q: Q[] = [[start, startTime]];
   const visited = new Set(posToString(start) + "#" + startTime);
   while (Q.length) {
     const item = Q.shift();
     if (!item) break;
     const [packPos, time] = item;
-    const [w, h] = getConstraints(map);
-    const index = time % (w * h);
-    // console.log("Index:", index);
+    const index = time % freePositions.cycle;
 
-    const options = getPossibleMoves(packPos, freePositions[index], start, end);
+    const options = getPossibleMoves(
+      packPos,
+      freePositions.positions[index],
+      start,
+      end
+    );
     if (!options) continue;
-    // console.log(options);
-    // console.log(freePositions[index]);
 
     for (const option of options) {
       const item: Q = [option, time + 1];
@@ -155,37 +163,30 @@ function bfs(start: Position, end: Position, map: Map, startTime: number) {
 
       if (!visited.has(hash)) {
         visited.add(hash);
-        if (posToString(option) == posToString(end)) return time;
+        if (posToString(option) == posToString(end)) return time - startTime;
         Q.push(item);
       }
     }
   }
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function posToString(pos: Position) {
   return pos[0] + "," + pos[1];
 }
 
-function solve(_map: Map) {
-  const map = JSON.parse(JSON.stringify(_map)) as Map;
-
+function solve(map: Map) {
   const [start, end] = getStartEndPos(map);
+  const freePositions = getFreePositions(map);
 
-  return bfs(start, end, map, 0);
+  let time = bfs(start, end, freePositions, 0);
+  // 240
+  console.log(time);
+
+  time += bfs(end, start, freePositions, time);
+  time += bfs(start, end, freePositions, time);
+  // 717
+  console.log(time);
 }
 
-function solve2(_map: Map) {
-  const map = JSON.parse(JSON.stringify(_map)) as Map;
-
-  const [start, end] = getStartEndPos(map);
-
-  let time = bfs(start, end, map, 0);
-  time = bfs(end, start, map, time);
-  time = bfs(start, end, map, time);
-
-  return time;
-}
-// 240
-console.log(solve(map));
-// 717
-console.log(solve2(map));
+solve(map);
