@@ -16,6 +16,15 @@ interface Valve {
   rate: number;
   destinations: string[];
 }
+interface ValveWithPaths {
+  name: string;
+  rate: number;
+  paths: {
+    name: string;
+    steps: number;
+    rate: number;
+  }[];
+}
 
 const valves = rawValves.map((el) => {
   return {
@@ -25,100 +34,122 @@ const valves = rawValves.map((el) => {
   };
 });
 
-type Node = [Valve, number];
-
-function bfs(start: Valve, target: string) {
-  const q: Node[] = [[start, 0]];
-  const visited = new Set(start.name);
-  let res = Number.POSITIVE_INFINITY;
-  while (q.length) {
-    const item = q.shift();
-    if (!item) break;
-    const [valve, steps] = item;
-    if (valve.name === target) {
-      res = steps;
-      break;
-    }
-    for (const pos of valve.destinations) {
-      visited.add(pos);
-      q.push([findValve(pos), steps + 1]);
-    }
-  }
-  return res;
-}
-
 function findValve(name: string): Valve {
-  return valves[valves.findIndex((v) => v.name == name)];
+  return [...valves.filter((v) => v.name == name)][0];
 }
 
-function inspect() {
+function solve(valves: ValveWithPaths[]) {
   const time = 30;
 
-  let releasedPressue = 0;
-  let pressurePerminute = 0;
+  let releasedPressure = 0;
+  let pressurePerMinute = 0;
   const openValves = new Set<string>();
-  let currentValve = findValve("AA");
+  let currentValve = valves.filter((v) => v.name == "AA")[0];
   let nextMove = 0;
   let nextValve = null;
-  let foo = 0;
 
-  for (let i = 1; i < time + 1; i++) {
-    console.log("Minute", i);
-    console.log("Valves open", openValves, "Pressure", pressurePerminute);
-    releasedPressue += pressurePerminute;
+  for (let i = 0; i < time + 1; i++) {
+    console.log("*** Minute", i);
+    const myArray = Array.from(openValves);
+    myArray.sort();
+    console.log(
+      "Valves open",
+      myArray,
+      "Pressure",
+      pressurePerMinute,
+      "Current",
+      currentValve.name
+    );
 
-    if (!nextValve) {
-      const options = orderedValves
-        .filter((v) => !openValves.has(v.name))
-        .map((v) => {
-          return {
-            name: v.name,
-            dist: bfs(currentValve, v.name),
-            rate: v.rate,
-          };
-        });
-      if (!options.length) continue;
-      options
-        .sort((a, b) => b.dist - a.dist)
-        .sort((a, b) => {
-          const d = Math.abs(b.dist - a.dist);
-          if (a.rate + d * a.rate == b.rate) return 0;
-          const foo = a.rate + d * a.rate < b.rate;
-          return foo ? 1 : -1;
-        });
-      console.log(options);
-
-      nextValve = { ...options[0] };
-      nextMove = nextValve.dist;
-    }
+    releasedPressure += pressurePerMinute;
 
     if (nextValve && nextMove <= 0 && i < 30) {
       console.log("Open valve", nextValve.name);
       openValves.add(nextValve.name);
-      pressurePerminute += nextValve.rate;
-      currentValve = findValve(nextValve.name);
-      const bar = nextValve.rate * (time - i);
-      foo += bar;
-      console.log(bar, foo);
+      pressurePerMinute += nextValve.rate;
+      const name = nextValve.name;
+      currentValve = valves.filter((v) => v.name == name)[0];
+      // console.log("Curr", currentValve);
 
       nextValve = null;
+    } else nextMove--;
+
+    if (!nextValve) {
+      const _options = valves
+        // .filter((v) => !openValves.has(v.name))
+        .filter((v) => v.name == currentValve.name)[0];
+
+      // console.log("_", _options);
+
+      const options = _options.paths?.filter((v) => !openValves.has(v.name));
+
+      if (!options.length) continue;
+      options
+        .sort((a, b) => b.steps - a.steps)
+        .sort((a, b) => {
+          const d = Math.abs(b.steps - a.steps);
+          if (a.rate + d * a.rate == b.rate) return 0;
+          const foo = a.rate + d * a.rate < b.rate;
+          return foo ? 1 : -1;
+        });
+      // console.log("**", options);
+      nextValve = { ...options[0] };
+      console.log("Next", nextValve.name);
+
+      nextMove = nextValve.steps;
     }
-    nextMove--;
+    console.log("Nextmove", nextMove, "Nextvalve", nextValve);
   }
 
-  console.log(releasedPressue);
+  return releasedPressure;
 }
 
-function filterEmptyValves([...valves]: Valve[]) {
-  return valves.filter((v) => v.rate > 0);
+function mapPaths(valves: Valve[]): ValveWithPaths[] {
+  const map = [];
+  for (const valve of valves) {
+    const paths = [];
+    const current = findValve(valve.name);
+
+    for (const dest of valves) {
+      if (dest.name == current.name || dest.rate == 0) continue;
+      paths.push({
+        name: dest.name,
+        steps: bfs(current, dest.name),
+        rate: dest.rate,
+      });
+    }
+    map.push({ name: valve.name, rate: valve.rate, paths });
+  }
+  return map;
 }
 
-// const routes = mapPaths();n
-const orderedValves = filterEmptyValves(valves);
+function bfs(valve: Valve, target: string) {
+  const q: [Valve, number][] = [[valve, 0]];
+  const visited = new Set(valve.name);
+  while (q.length) {
+    const item = q.shift();
+    if (!item) break;
+    if (item[0].name == target) return item[1];
+
+    for (const dest of item[0].destinations) {
+      if (!visited.has(dest)) {
+        visited.add(dest);
+        q.push([findValve(dest), item[1] + 1]);
+      }
+    }
+  }
+  throw new Error("This should not happen…");
+}
+
 const start = performance.now();
-inspect();
-const end = performance.now();
 
-console.log((end - start) / 1000);
+const valvesWithPaths = mapPaths(valves);
 
 // 1857
+console.log(solve(valvesWithPaths));
+
+const end = performance.now();
+
+console.log((end - start) / 1000, "ms");
+
+console.log(valvesWithPaths);
