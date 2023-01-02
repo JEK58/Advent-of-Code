@@ -31,12 +31,11 @@ const block: Line[] = [
 ];
 
 const rocks = [hbar, plus, l, vbar, block];
-const stack: Line[] = [];
 
 function detectCollision(a: Line, b: Line) {
   console.log("*");
-  printArena([a]);
   printArena([b]);
+  printArena([a]);
 
   for (let i = 0; i < a.length; i++) {
     if (a[i] != null && b[i] != null) return true;
@@ -63,6 +62,9 @@ function foo(maxRocks: number) {
       printArena(rock);
       instructionIndex++;
       if (!arena[i]?.length) continue;
+      console.log("Arena entered");
+      printArena(arena);
+
       for (let k = 0; k <= size - 1; k++) {
         if (arena[i + k]?.length && detectCollision(arena[i + k], rock[k])) {
           collisionHeight = i;
