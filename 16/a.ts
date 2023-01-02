@@ -1,4 +1,4 @@
-// WIP
+// Works, but super slow
 
 const input = await Deno.readTextFile("input.txt");
 const rawValves = input.split(/\r?\n/g).map((v) =>
@@ -21,10 +21,10 @@ interface ValveWithPaths {
   rate: number;
   paths: {
     name: string;
-    steps: number;
-    rate: number;
+    time: number;
   }[];
 }
+type Combination = [string[], number];
 
 const valves = rawValves.map((el) => {
   return {
@@ -38,84 +38,64 @@ function findValve(name: string): Valve {
   return [...valves.filter((v) => v.name == name)][0];
 }
 
-function solve(valves: ValveWithPaths[]) {
-  const time = 30;
+function calcPressure(
+  pos: string,
+  time: number,
+  valves: ValveWithPaths[],
+  filter?: string[],
+  open = "",
+  pressure = 0
+) {
+  const valve = valves.filter((v) => v.name == pos)[0];
 
-  let releasedPressure = 0;
-  let pressurePerMinute = 0;
-  const openValves = new Set<string>();
-  let currentValve = valves.filter((v) => v.name == "AA")[0];
-  let nextMove = 0;
-  let nextValve = null;
+  open += valve.name + ",";
+  const currentPressure = pressure + valve.rate * time;
+  let maxPressure = currentPressure;
 
-  for (let i = 0; i < time + 1; i++) {
-    console.log("*** Minute", i);
-    const myArray = Array.from(openValves);
-    myArray.sort();
-    console.log(
-      "Valves open",
-      myArray,
-      "Pressure",
-      pressurePerMinute,
-      "Current",
-      currentValve.name
+  for (const dest of valve.paths) {
+    if (
+      open.includes(dest.name) ||
+      time < dest.time ||
+      (filter && !filter.includes(dest.name))
+    )
+      continue;
+
+    const newPressure = calcPressure(
+      dest.name,
+      time - dest.time,
+      valves,
+      filter,
+      open,
+      currentPressure
     );
 
-    releasedPressure += pressurePerMinute;
-
-    if (nextValve && nextMove <= 0 && i < 30) {
-      console.log("Open valve", nextValve.name);
-      openValves.add(nextValve.name);
-      pressurePerMinute += nextValve.rate;
-      const name = nextValve.name;
-      currentValve = valves.filter((v) => v.name == name)[0];
-      // console.log("Curr", currentValve);
-
-      nextValve = null;
-    } else nextMove--;
-
-    if (!nextValve) {
-      const _options = valves
-        // .filter((v) => !openValves.has(v.name))
-        .filter((v) => v.name == currentValve.name)[0];
-
-      // console.log("_", _options);
-
-      const options = _options.paths?.filter((v) => !openValves.has(v.name));
-
-      if (!options.length) continue;
-      options
-        .sort((a, b) => b.steps - a.steps)
-        .sort((a, b) => {
-          const d = Math.abs(b.steps - a.steps);
-          if (a.rate + d * a.rate == b.rate) return 0;
-          const foo = a.rate + d * a.rate < b.rate;
-          return foo ? 1 : -1;
-        });
-      // console.log("**", options);
-      nextValve = { ...options[0] };
-      console.log("Next", nextValve.name);
-
-      nextMove = nextValve.steps;
-    }
-    console.log("Nextmove", nextMove, "Nextvalve", nextValve);
+    if (newPressure > maxPressure) maxPressure = newPressure;
   }
 
-  return releasedPressure;
+  return maxPressure;
 }
+
+const getCombinations = (arr: string[]) =>
+  [...Array(2 ** arr.length - 1).keys()].map((n) =>
+    ((n + 1) >>> 0)
+      .toString(2)
+      .split("")
+      .reverse()
+      .map((n, i) => (+n ? arr[i] : ""))
+      .filter(Boolean)
+  );
 
 function mapPaths(valves: Valve[]): ValveWithPaths[] {
   const map = [];
   for (const valve of valves) {
+    if (valve.rate == 0 && valve.name != "AA") continue;
     const paths = [];
-    const current = findValve(valve.name);
 
     for (const dest of valves) {
-      if (dest.name == current.name || dest.rate == 0) continue;
+      if (dest.name == valve.name || dest.rate == 0) continue;
       paths.push({
         name: dest.name,
-        steps: bfs(current, dest.name),
-        rate: dest.rate,
+        time: bfs(valve, dest.name) + 1,
       });
     }
     map.push({ name: valve.name, rate: valve.rate, paths });
@@ -141,15 +121,43 @@ function bfs(valve: Valve, target: string) {
   throw new Error("This should not happen…");
 }
 
+function solve(valves: ValveWithPaths[]) {
+  const time = 30;
+  const start = "AA";
+  return calcPressure(start, time, valves);
+}
+
+function solve2(valves: ValveWithPaths[]) {
+  const time = 26;
+  const start = "AA";
+
+  const valveNames = valves.filter((v) => v.rate > 0).map((v) => v.name);
+  const combinations: Combination[] = getCombinations(valveNames)
+    // This may not be optimal in every situation but gives a little speed…
+    .filter((f) => f.length > 2 && f.length <= valves.length / 2)
+    .map((filter) => {
+      return [filter, calcPressure(start, time, valves, filter)];
+    });
+  const sums: number[] = [];
+  for (const path of combinations) {
+    const valid = combinations
+      .filter((f) => !f[0].some((r) => path[0].includes(r)))
+      .map((v) => v[1]);
+    sums.push(Math.max.apply(0, valid) + path[1]);
+  }
+  return Math.max.apply(0, sums);
+}
+
 const start = performance.now();
+// Start
 
 const valvesWithPaths = mapPaths(valves);
 
 // 1857
 console.log(solve(valvesWithPaths));
+// 2536
+console.log(solve2(valvesWithPaths));
 
+// End
 const end = performance.now();
-
 console.log((end - start) / 1000, "ms");
-
-console.log(valvesWithPaths);
