@@ -142,5 +142,5 @@ console.log(getBestBlueprint(blueprints, 24));
 const end = performance.now();
 console.log((end - start) / 1000, "ms");
 
-// 33
-// 63.858 ms
+// 1719
+// 5291.848 ms
