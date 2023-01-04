@@ -1,100 +1,103 @@
-// WIP
-
 const input = await Deno.readTextFile("input.txt");
 const instructions = input.split("") as Instruction[];
 
 type Instruction = "<" | ">";
-type Line = [Pixel, Pixel, Pixel, Pixel, Pixel, Pixel, Pixel];
-type Pixel = "#" | null;
+type Line = [Voxel, Voxel, Voxel, Voxel, Voxel, Voxel, Voxel];
+type Voxel = "#" | null;
 
-const hbar: Line[] = [[null, null, "#", "#", "#", "#", null]];
-
-const plus: Line[] = [
-  [null, null, null, "#", null, null, null],
-  [null, null, "#", "#", "#", null, null],
-  [null, null, null, "#", null, null, null],
+const rocks: Line[][] = [
+  [[null, null, "#", "#", "#", "#", null]],
+  [
+    [null, null, null, "#", null, null, null],
+    [null, null, "#", "#", "#", null, null],
+    [null, null, null, "#", null, null, null],
+  ],
+  [
+    [null, null, null, null, "#", null, null],
+    [null, null, null, null, "#", null, null],
+    [null, null, "#", "#", "#", null, null],
+  ],
+  [
+    [null, null, "#", null, null, null, null],
+    [null, null, "#", null, null, null, null],
+    [null, null, "#", null, null, null, null],
+    [null, null, "#", null, null, null, null],
+  ],
+  [
+    [null, null, "#", "#", null, null, null],
+    [null, null, "#", "#", null, null, null],
+  ],
 ];
-const l: Line[] = [
-  [null, null, null, null, "#", null, null],
-  [null, null, null, null, "#", null, null],
-  [null, null, "#", "#", "#", null, null],
-];
-const vbar: Line[] = [
-  [null, null, "#", null, null, null, null],
-  [null, null, "#", null, null, null, null],
-  [null, null, "#", null, null, null, null],
-  [null, null, "#", null, null, null, null],
-];
-const block: Line[] = [
-  [null, null, "#", "#", null, null, null],
-  [null, null, "#", "#", null, null, null],
-];
-
-const rocks = [hbar, plus, l, vbar, block];
 
 function detectCollision(a: Line, b: Line) {
-  console.log("*");
-  printArena([b]);
-  printArena([a]);
-
-  for (let i = 0; i < a.length; i++) {
+  for (let i = 0; i < a.length; i++)
     if (a[i] != null && b[i] != null) return true;
-  }
   return false;
 }
 
-function foo(maxRocks: number) {
+function shiftPossible(
+  rock: Line[],
+  instructionIndex: number,
+  arena: Line[],
+  level: number
+) {
+  const rockHeight = rock.length;
+  let shiftPossible = true;
+  const shiftedRock = shiftRock(rock, getInstruction(instructionIndex));
+
+  for (let rockLevel = 0; rockLevel <= rockHeight - 1; rockLevel++) {
+    if (
+      arena[level + 1 + rockLevel]?.length &&
+      detectCollision(arena[level + 1 + rockLevel], shiftedRock[rockLevel])
+    )
+      shiftPossible = false;
+  }
+  return shiftPossible;
+}
+
+function solve(maxRocks: number) {
   let rockCount = 0;
   let instructionIndex = 0;
   const arena: Line[] = [["#", "#", "#", "#", "#", "#", "#"]];
 
   while (rockCount < maxRocks) {
     let rock = [...rocks[rockCount % 5]].reverse();
-    const size = rock.length;
-    // console.log("Rock size", size);
+    const rockHeight = rock.length;
 
-    let collisionHeight = 0;
+    let collisionLevel = 0;
     const arenaHeight = arena.length + 3;
 
-    outerLoop: for (let i = arenaHeight - 1; i >= 0; i--) {
-      console.log("New arena line", getInstruction(instructionIndex));
-      rock = shiftRock(rock, getInstruction(instructionIndex));
-      printArena(rock);
+    outerLoop: for (let level = arenaHeight - 1; level >= 0; level--) {
+      if (shiftPossible(rock, instructionIndex, arena, level))
+        rock = shiftRock(rock, getInstruction(instructionIndex));
       instructionIndex++;
-      if (!arena[i]?.length) continue;
-      console.log("Arena entered");
-      printArena(arena);
 
-      for (let k = 0; k <= size - 1; k++) {
-        if (arena[i + k]?.length && detectCollision(arena[i + k], rock[k])) {
-          collisionHeight = i;
-          console.log("Collision", i);
+      if (!arena[level]?.length) continue;
 
+      for (let k = 0; k <= rockHeight - 1; k++) {
+        if (
+          arena[level + k]?.length &&
+          detectCollision(arena[level + k], rock[k])
+        ) {
+          collisionLevel = level;
           break outerLoop;
         }
       }
     }
-    console.log("Merging line");
-    for (let i = collisionHeight; i < size + collisionHeight; i++) {
+    for (let i = collisionLevel; i < rockHeight + collisionLevel; i++) {
       if (!arena[i + 1]?.length)
         arena.push([null, null, null, null, null, null, null]);
-      arena[i + 1] = mergeLines(arena[i + 1], rock[i - collisionHeight]);
+      arena[i + 1] = mergeLines(arena[i + 1], rock[i - collisionLevel]);
     }
 
-    // console.log(rock.length);
     rockCount++;
   }
-  printArena(arena);
-
   return arena.length - 1;
 }
 function getInstruction(index: number) {
   return instructions[index % instructions.length];
 }
 function shiftRock([...rock]: Line[], direction: "<" | ">"): Line[] {
-  console.log("Shift rock");
-  printArena(rock);
-
   if (direction == "<") {
     if (rock.some((v) => v[0] != null)) return rock;
     return rock.map((el) => [...el.slice(1), null]) as Line[];
@@ -104,21 +107,27 @@ function shiftRock([...rock]: Line[], direction: "<" | ">"): Line[] {
   }
   return rock;
 }
-function newEmptyLine(): Line {
-  return [null, null, null, null, null, null, null];
-}
+
 function printArena([...arena]: Line[]) {
+  let i = arena.length - 1;
   for (const line of arena.reverse()) {
-    console.log(line.map((a) => (a ? "#" : ".")).join(""));
+    console.log(i, line.map((a) => (a ? "#" : ".")).join(""));
+    i--;
   }
 }
 
 function mergeLines(a: Line, b: Line) {
-  return a.map((el, i) => {
-    return el ? el : b[i];
-  }) as Line;
+  return a.map((el, i) => (el ? el : b[i])) as Line;
 }
-console.log(foo(3));
 
-// printArena(l);
-// printArena(shiftRock(l, "<"));
+// Start
+const start = performance.now();
+
+// 3124
+console.log(solve(2022));
+//  1561176470569
+console.log(solve(2022));
+
+// End
+const end = performance.now();
+console.log((end - start) / 1000, "ms");
