@@ -1,7 +1,7 @@
 const input = await Deno.readTextFile("input.txt");
 const blueprints = input
   .split(/\r?\n/g)
-  .map((c) => c.match(/\d+/g).map(Number))
+  .map((c) => c.match(/\d+/g)!.map(Number))
   .map((b) => {
     return {
       id: b[0],
@@ -33,7 +33,7 @@ interface Inventory {
   geoRobot: number;
 }
 
-function getBestBlueprint(blueprints: Blueprint[], time: number) {
+function solve1(blueprints: Blueprint[], time: number) {
   const inventory = {
     ore: 0,
     clay: 0,
@@ -48,6 +48,22 @@ function getBestBlueprint(blueprints: Blueprint[], time: number) {
     .map((bp) => dfs(bp, inventory, time) * bp.id)
     .reduce((a, b) => a + b);
 }
+function solve2(blueprints: Blueprint[], time: number) {
+  const inventory = {
+    ore: 0,
+    clay: 0,
+    obs: 0,
+    geo: 0,
+    oRobot: 1,
+    cRobot: 0,
+    obsRobot: 0,
+    geoRobot: 0,
+  };
+  return blueprints
+    .slice(0, 3)
+    .map((bp) => dfs(bp, inventory, time))
+    .reduce((a, b) => a * b);
+}
 
 function maxCosts(bp: Blueprint) {
   const ore = Math.max(bp.clayCost, bp.oreCost, bp.geodeOreCost, bp.obsOreCost);
@@ -55,25 +71,30 @@ function maxCosts(bp: Blueprint) {
   const obs = Math.max(bp.geodeObsCost);
   return { ore, clay, obs };
 }
-function dfs(bp: Blueprint, inv: Inventory, time: number, round = 0, best = 0) {
+interface BuildOptions {
+  ore: boolean;
+  clay: boolean;
+  obs: boolean;
+  geo: boolean;
+}
+
+function dfs(
+  bp: Blueprint,
+  inv: Inventory,
+  time: number,
+  round = 0,
+  best = 0,
+  options?: BuildOptions
+) {
+  // If a possible branch does not give more geodes (in a best case scenario)
+  // then the current best, iT's not worth continuing
   let maxPossibleGeods = inv.geo;
-  // console.log("Current max", maxPossibleGeods);
-  for (let i = 1; i <= time - round; i++) {
-    maxPossibleGeods += i;
-    maxPossibleGeods += inv.geoRobot;
-  }
-  // console.log("Max: ", maxPossibleGeods);
-  // console.log("Time left", time - round, "Round", round);
+  for (let i = 1; i <= time - round; i++) maxPossibleGeods += i + inv.geoRobot;
+  if (maxPossibleGeods < best) return 0;
 
-  if (maxPossibleGeods < best) {
-    // console.log("Foo");
-    return 0;
-  }
-
-  const maxRobots = maxCosts(bp);
   round++;
 
-  function collectGoods(inventory: Inventory) {
+  function harvestGoods(inventory: Inventory) {
     const inv = { ...inventory };
     inv.ore += 1 * inventory.oRobot;
     inv.clay += 1 * inventory.cRobot;
@@ -81,66 +102,98 @@ function dfs(bp: Blueprint, inv: Inventory, time: number, round = 0, best = 0) {
     inv.geo += 1 * inventory.geoRobot;
     return inv;
   }
-  if (round == time) return collectGoods(inv).geo;
 
-  if (true) {
-    const upd = collectGoods(inv);
-    const res = dfs(bp, upd, time, round, best);
-    if (res > best) best = res;
+  if (round == time) return harvestGoods(inv).geo;
+
+  // Check if it is possible to build a robot,but do not
+  // build more robots for a good than any robot costs to build
+
+  function buildOreRobot(inv: Inventory) {
+    return inv.ore >= bp.oreCost && inv.oRobot < maxCosts(bp).ore;
   }
-  // Ore Robot
-  if (inv.ore >= bp.oreCost && inv.oRobot <= maxRobots.ore) {
+  function buildClayRobot(inv: Inventory) {
+    return inv.ore >= bp.clayCost && inv.cRobot < maxCosts(bp).clay;
+  }
+  function buildObsidianRobot(inv: Inventory) {
+    return (
+      inv.ore >= bp.obsOreCost &&
+      inv.clay >= bp.obsClayCost &&
+      inv.obsRobot < maxCosts(bp).obs
+    );
+  }
+  function fundsForGeode(inv: Inventory) {
+    return inv.ore >= bp.geodeOreCost && inv.obs >= bp.geodeObsCost;
+  }
+  function possibleBuilds(inv: Inventory) {
+    return {
+      ore: buildOreRobot(inv),
+      clay: buildClayRobot(inv),
+      obs: buildObsidianRobot(inv),
+      geo: fundsForGeode(inv),
+    };
+  }
+
+  const stock = harvestGoods(inv);
+
+  // Do not build anything and do not build a robot if we could have built it this round
+  const res = dfs(bp, stock, time, round, best, possibleBuilds(inv));
+  if (res > best) best = res;
+
+  // Do not build robots in the penultimate round
+  const penultimate = round == time - 1;
+
+  // Build Ore Robot
+  if (buildOreRobot(inv) && !options?.ore && !penultimate) {
     const option = { ...inv };
     option.ore -= bp.oreCost;
-    const upd = collectGoods(option);
-    upd.oRobot++;
-    const res = dfs(bp, upd, time, round, best);
+    const stock = harvestGoods(option);
+    stock.oRobot++;
+    const res = dfs(bp, stock, time, round, best);
     if (res > best) best = res;
   }
-  // Clay Robot
-  if (inv.ore >= bp.clayCost && inv.cRobot <= maxRobots.clay) {
+  // Build Clay Robot
+  if (buildClayRobot(inv) && !options?.clay && !penultimate) {
     const option = { ...inv };
     option.ore -= bp.clayCost;
-    const upd = collectGoods(option);
-    upd.cRobot++;
-    const res = dfs(bp, upd, time, round, best);
+    const stock = harvestGoods(option);
+    stock.cRobot++;
+    const res = dfs(bp, stock, time, round, best);
     if (res > best) best = res;
   }
-  // Obsidian Robot
-  if (
-    inv.ore >= bp.obsOreCost &&
-    inv.clay >= bp.obsClayCost &&
-    inv.obsRobot <= maxRobots.obs
-  ) {
+  // Build Obsidian Robot
+  if (buildObsidianRobot(inv) && !options?.obs && !penultimate) {
     const option = { ...inv };
     option.ore -= bp.obsOreCost;
     option.clay -= bp.obsClayCost;
-    const upd = collectGoods(option);
-    upd.obsRobot++;
-    const res = dfs(bp, upd, time, round, best);
+    const stock = harvestGoods(option);
+    stock.obsRobot++;
+    const res = dfs(bp, stock, time, round, best);
     if (res > best) best = res;
   }
-  // Geode Robot
-  if (inv.ore >= bp.geodeOreCost && inv.obs >= bp.geodeObsCost) {
+  // Build Geode Robot
+  if (fundsForGeode(inv) && !options?.geo) {
     const option = { ...inv };
     option.ore -= bp.geodeOreCost;
     option.obs -= bp.geodeObsCost;
-    const upd = collectGoods(option);
-    upd.geoRobot++;
-    const res = dfs(bp, upd, time, round, best);
+    const stock = harvestGoods(option);
+    stock.geoRobot++;
+    const res = dfs(bp, stock, time, round, best);
     if (res > best) best = res;
   }
+
   return best;
 }
 
 // Start
 const start = performance.now();
 
-console.log(getBestBlueprint(blueprints, 24));
+// 1719
+console.log(solve1(blueprints, 24));
+//  19530
+console.log(solve2(blueprints, 32));
+
+// 3.282 ms
 
 // End
 const end = performance.now();
 console.log((end - start) / 1000, "ms");
-
-// 1719
-// 5291.848 ms
