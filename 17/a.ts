@@ -59,6 +59,11 @@ function solve(maxRocks: number) {
   let rockCount = 0;
   let instructionIndex = 0;
   const arena: Line[] = [["#", "#", "#", "#", "#", "#", "#"]];
+  const maxCycle = 1000;
+
+  const Hash = new Set();
+  let cycle = 0;
+  let additional = 0;
 
   while (rockCount < maxRocks) {
     let rock = [...rocks[rockCount % 5]].reverse();
@@ -67,6 +72,27 @@ function solve(maxRocks: number) {
     let collisionLevel = 0;
     const arenaHeight = arena.length + 3;
 
+    if (rockCount >= maxCycle) {
+      const hash =
+        arena[arena.length - 1] +
+        "," +
+        (instructionIndex % instructions.length) +
+        "," +
+        (rockCount % 5);
+
+      if (Hash.has(hash)) {
+        const rocksLeft = maxRocks - rockCount;
+        const cycleHeight = arena.length - cycle;
+        const cycleAfter = rockCount - maxCycle;
+        additional = Math.floor(rocksLeft / cycleAfter) * cycleHeight;
+        rockCount += Math.floor(rocksLeft / cycleAfter) * cycleAfter;
+      }
+
+      if (rockCount == maxCycle) {
+        Hash.add(hash);
+        cycle = arena.length;
+      }
+    }
     outerLoop: for (let level = arenaHeight - 1; level >= 0; level--) {
       if (shiftPossible(rock, instructionIndex, arena, level))
         rock = shiftRock(rock, getInstruction(instructionIndex));
@@ -92,8 +118,9 @@ function solve(maxRocks: number) {
 
     rockCount++;
   }
-  return arena.length - 1;
+  return arena.length - 1 + additional;
 }
+
 function getInstruction(index: number) {
   return instructions[index % instructions.length];
 }
@@ -108,14 +135,6 @@ function shiftRock([...rock]: Line[], direction: "<" | ">"): Line[] {
   return rock;
 }
 
-function printArena([...arena]: Line[]) {
-  let i = arena.length - 1;
-  for (const line of arena.reverse()) {
-    console.log(i, line.map((a) => (a ? "#" : ".")).join(""));
-    i--;
-  }
-}
-
 function mergeLines(a: Line, b: Line) {
   return a.map((el, i) => (el ? el : b[i])) as Line;
 }
@@ -125,8 +144,9 @@ const start = performance.now();
 
 // 3124
 console.log(solve(2022));
-//  1561176470569
-console.log(solve(2022));
+
+// 1561176470569
+console.log(solve(1000000000000));
 
 // End
 const end = performance.now();
