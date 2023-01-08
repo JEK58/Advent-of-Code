@@ -2,8 +2,8 @@ const input = await Deno.readTextFile("input.txt");
 const instructions = input.split("") as Instruction[];
 
 type Instruction = "<" | ">";
-type Line = [Voxel, Voxel, Voxel, Voxel, Voxel, Voxel, Voxel];
 type Voxel = "#" | null;
+type Line = [Voxel, Voxel, Voxel, Voxel, Voxel, Voxel, Voxel];
 
 const rocks: Line[][] = [
   [[null, null, "#", "#", "#", "#", null]],
@@ -59,9 +59,9 @@ function solve(maxRocks: number) {
   let rockCount = 0;
   let instructionIndex = 0;
   const arena: Line[] = [["#", "#", "#", "#", "#", "#", "#"]];
-  const maxCycle = 1000;
+  const expectCycleAfter = 1000;
 
-  const Hash = new Set();
+  let hash = "";
   let cycle = 0;
   let additional = 0;
 
@@ -72,24 +72,24 @@ function solve(maxRocks: number) {
     let collisionLevel = 0;
     const arenaHeight = arena.length + 3;
 
-    if (rockCount >= maxCycle) {
-      const hash =
+    if (rockCount >= expectCycleAfter) {
+      const currentHash =
         arena[arena.length - 1] +
         "," +
         (instructionIndex % instructions.length) +
         "," +
         (rockCount % 5);
 
-      if (Hash.has(hash)) {
+      if (hash == currentHash) {
         const rocksLeft = maxRocks - rockCount;
         const cycleHeight = arena.length - cycle;
-        const cycleAfter = rockCount - maxCycle;
+        const cycleAfter = rockCount - expectCycleAfter;
         additional = Math.floor(rocksLeft / cycleAfter) * cycleHeight;
         rockCount += Math.floor(rocksLeft / cycleAfter) * cycleAfter;
       }
 
-      if (rockCount == maxCycle) {
-        Hash.add(hash);
+      if (rockCount == expectCycleAfter) {
+        hash = currentHash;
         cycle = arena.length;
       }
     }
